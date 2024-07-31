@@ -9,3 +9,4 @@ pub struct Wall;
 
 #[derive(Component)]
 pub struct MazeDisplay;
+

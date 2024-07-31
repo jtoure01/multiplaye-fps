@@ -2,6 +2,7 @@ mod maze;
 mod player;
 mod components;
 mod systems;
+mod levels;
 
 use bevy::prelude::*;
 

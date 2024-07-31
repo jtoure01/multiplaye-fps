@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::player::Player;
 use crate::components::{MazeResource, Wall, MazeDisplay};
-use crate::maze::{WIDTH, HEIGHT};
+use crate::maze::{Maze, WIDTH, HEIGHT};
 
 pub fn setup(
     mut commands: Commands,
@@ -9,13 +9,13 @@ pub fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     maze: Res<MazeResource>,
 ) {
-    // Camera
- // Camera
-commands.spawn(Camera3dBundle {
-    transform: Transform::from_xyz(-10.0, 10.0, 10.0).looking_at(Vec3::new(1.0, 0.5, 1.0), Vec3::Y),
-    ..default()
-});
-    // Light
+    // Caméra
+    commands.spawn(Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 10.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    // Lumière
     commands.spawn(PointLightBundle {
         point_light: PointLight {
             intensity: 1500.0,
@@ -26,18 +26,19 @@ commands.spawn(Camera3dBundle {
         ..default()
     });
 
-    // Player
+    // Joueur
+    let spawn_pos = find_spawn_position(&maze.0);
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
             material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-            transform: Transform::from_xyz(1.0, 0.5, 1.0),
+            transform: Transform::from_translation(spawn_pos),
             ..default()
         },
-        Player::new(),
+        Player::new(spawn_pos),
     ));
 
-    // Maze walls
+    // Murs du labyrinthe
     for y in 0..HEIGHT {
         for x in 0..WIDTH {
             if maze.0.is_wall(x, y) {
@@ -54,35 +55,34 @@ commands.spawn(Camera3dBundle {
         }
     }
 
-    // Floor
-  // Floor
-commands.spawn(PbrBundle {
-    mesh: meshes.add(shape::Plane::from_size(20.0).into()),
-    material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-    transform: Transform::from_xyz(10.0, 0.0, 10.0),
-    ..default()
-});
-
-    // 2D Maze display
-   // 2D Maze display
-commands.spawn((
-    TextBundle::from_section(
-        "",
-        TextStyle {
-            font_size: 20.0,
-            color: Color::WHITE,
-            ..default()
-        },
-    )
-    .with_style(Style {
-        position_type: PositionType::Absolute,
-        left: Val::Px(10.0),
-        top: Val::Px(10.0),
+    // Sol
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(shape::Plane::from_size(WIDTH as f32).into()),
+        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+        transform: Transform::from_xyz(WIDTH as f32 / 2.0, 0.0, HEIGHT as f32 / 2.0),
         ..default()
-    }),
-    MazeDisplay,
-));
+    });
+
+    // Affichage 2D du labyrinthe
+    commands.spawn((
+        TextBundle::from_section(
+            "",
+            TextStyle {
+                font_size: 24.0, // Augmentez la taille de la police si nécessaire
+                color: Color::WHITE,
+                ..default()
+            },
+        )
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            left: Val::Px(5.0),
+            top: Val::Px(5.0),
+            ..default()
+        }),
+        MazeDisplay,
+    ));
 }
+
 pub fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&mut Transform, &mut Player)>,
@@ -90,34 +90,51 @@ pub fn player_movement(
     maze: Res<MazeResource>,
     time: Res<Time>,
 ) {
-    let (mut transform, mut player) = query.single_mut();
-    let mut camera_transform = camera_query.single_mut();
-    let mut direction = Vec3::ZERO;
+    if let Ok((mut transform, mut player)) = query.get_single_mut() {
+        let mut direction = Vec3::ZERO;
+        let mut camera_transform = camera_query.single_mut();
+        if keyboard_input.pressed(KeyCode::Left) {
+            direction -= Vec3::new(1.0, 0.0, 0.0);
+        }
+        if keyboard_input.pressed(KeyCode::Right) {
+            direction += Vec3::new(1.0, 0.0, 0.0);
+        }
+        if keyboard_input.pressed(KeyCode::Up) {
+            direction -= Vec3::new(0.0, 0.0, 1.0);
+        }
+        if keyboard_input.pressed(KeyCode::Down) {
+            direction += Vec3::new(0.0, 0.0, 1.0);
+        }
 
-    if keyboard_input.pressed(KeyCode::Left) {
-        direction -= Vec3::new(1.0, 0.0, 0.0);
-    }
-    if keyboard_input.pressed(KeyCode::Right) {
-        direction += Vec3::new(1.0, 0.0, 0.0);
-    }
-    if keyboard_input.pressed(KeyCode::Up) {
-        direction -= Vec3::new(0.0, 0.0, 1.0);
-    }
-    if keyboard_input.pressed(KeyCode::Down) {
-        direction += Vec3::new(0.0, 0.0, 1.0);
-    }
 
-    if direction != Vec3::ZERO {
-        let speed = 5.0; // Ajustez cette valeur pour modifier la vitesse de déplacement
-        let new_position = player.position + direction.normalize() * speed * time.delta_seconds();
-        let new_x = new_position.x.round() as usize;
-        let new_z = new_position.z.round() as usize;
+        if direction != Vec3::ZERO {
+            let speed = 5.0;
+            let move_delta = direction.normalize() * speed * time.delta_seconds();
+            let new_position = player.position + move_delta;
 
-        if !maze.0.is_wall(new_x, new_z) {
-            player.position = new_position;
+            let current_x = player.position.x.round() as usize;
+            let current_z = player.position.z.round() as usize;
+            let new_x = new_position.x.round() as usize;
+            let new_z = new_position.z.round() as usize;
+
+            let mut can_move_x = true;
+            let mut can_move_z = true;
+
+            if new_x != current_x && maze.0.is_wall(new_x, current_z) {
+                can_move_x = false;
+            }
+            if new_z != current_z && maze.0.is_wall(current_x, new_z) {
+                can_move_z = false;
+            }
+
+            if can_move_x {
+                player.position.x = new_position.x;
+            }
+            if can_move_z {
+                player.position.z = new_position.z;
+            }
+
             transform.translation = player.position;
-            
-            // Mise à jour de la position de la caméra
             camera_transform.translation = player.position + Vec3::new(-10.0, 10.0, 10.0);
             camera_transform.look_at(player.position, Vec3::Y);
         }
@@ -129,24 +146,47 @@ pub fn update_maze_display(
     player: Query<&Transform, With<Player>>,
     mut text_query: Query<&mut Text, With<MazeDisplay>>,
 ) {
-    let player_transform = player.single();
-    let player_x = player_transform.translation.x.round() as usize;
-    let player_z = player_transform.translation.z.round() as usize;
+    let player_pos = player.get_single().map(|t| t.translation).unwrap_or(Vec3::ZERO);
+    let player_x = player_pos.x.round() as usize;
+    let player_z = player_pos.z.round() as usize;
 
     let mut maze_text = String::new();
+    
+    // Ajouter une bordure supérieure
+    maze_text.push_str(&"+".repeat(WIDTH + 2));
+    maze_text.push('\n');
+
     for z in 0..HEIGHT {
+        maze_text.push('|'); // Bordure gauche
         for x in 0..WIDTH {
-            if x == player_x && z == player_z {
-                maze_text.push('P');
+            let char = if x == player_x && z == player_z {
+                'p' 
             } else if maze.0.is_wall(x, z) {
-                maze_text.push('█');
-            } else {
-                maze_text.push('·');
-            }
+                '#' 
+            }  else {
+                ' ' 
+            };
+            maze_text.push_str(&char.to_string());
         }
-        maze_text.push('\n');
+        maze_text.push_str("|\n"); 
     }
 
-    let mut text = text_query.single_mut();
-    text.sections[0].value = maze_text;
+    // Ajouter une bordure inférieure
+    maze_text.push_str(&"+".repeat(WIDTH + 2));
+
+    if let Ok(mut text) = text_query.get_single_mut() {
+        text.sections[0].value = maze_text;
+    }
+}
+
+fn find_spawn_position(maze: &Maze) -> Vec3 {
+    for z in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if maze.is_spawn_area(x, z) {
+                return Vec3::new(x as f32, 0.5, z as f32);
+            }
+        }
+    }
+    // Position par défaut si aucune zone de spawn n'est trouvée
+    Vec3::new(1.0, 0.5, 1.0)
 }
