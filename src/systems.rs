@@ -11,7 +11,7 @@ pub fn setup(
 ) {
     // Caméra
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 10.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(10.0, 10.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 
@@ -54,8 +54,6 @@ pub fn setup(
             }
         }
     }
-
-    // Sol
     commands.spawn(PbrBundle {
         mesh: meshes.add(shape::Plane::from_size(WIDTH as f32).into()),
         material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
@@ -63,12 +61,11 @@ pub fn setup(
         ..default()
     });
 
-    // Affichage 2D du labyrinthe
     commands.spawn((
         TextBundle::from_section(
             "",
             TextStyle {
-                font_size: 24.0, // Augmentez la taille de la police si nécessaire
+                font_size: 24.0,
                 color: Color::WHITE,
                 ..default()
             },
@@ -82,7 +79,6 @@ pub fn setup(
         MazeDisplay,
     ));
 }
-
 pub fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&mut Transform, &mut Player)>,
@@ -93,23 +89,28 @@ pub fn player_movement(
     if let Ok((mut transform, mut player)) = query.get_single_mut() {
         let mut direction = Vec3::ZERO;
         let mut camera_transform = camera_query.single_mut();
-        if keyboard_input.pressed(KeyCode::Left) {
-            direction -= Vec3::new(1.0, 0.0, 0.0);
-        }
+        let rotation_speed = 2.5;
+        let movement_speed = 5.0;
+
         if keyboard_input.pressed(KeyCode::Right) {
-            direction += Vec3::new(1.0, 0.0, 0.0);
+            let rotation = -rotation_speed * time.delta_seconds();
+            camera_transform.rotate_y(rotation);
+            transform.rotate_y(rotation);
+        } else if keyboard_input.pressed(KeyCode::Left) {
+            let rotation = rotation_speed * time.delta_seconds();
+            camera_transform.rotate_y(rotation);
+            transform.rotate_y(rotation);
+        }
+
+        if keyboard_input.pressed(KeyCode::Down) {
+            direction -= transform.local_z();
         }
         if keyboard_input.pressed(KeyCode::Up) {
-            direction -= Vec3::new(0.0, 0.0, 1.0);
+            direction += transform.local_z();
         }
-        if keyboard_input.pressed(KeyCode::Down) {
-            direction += Vec3::new(0.0, 0.0, 1.0);
-        }
-
 
         if direction != Vec3::ZERO {
-            let speed = 5.0;
-            let move_delta = direction.normalize() * speed * time.delta_seconds();
+            let move_delta = direction.normalize() * movement_speed * time.delta_seconds();
             let new_position = player.position + move_delta;
 
             let current_x = player.position.x.round() as usize;
@@ -117,27 +118,18 @@ pub fn player_movement(
             let new_x = new_position.x.round() as usize;
             let new_z = new_position.z.round() as usize;
 
-            let mut can_move_x = true;
-            let mut can_move_z = true;
-
-            if new_x != current_x && maze.0.is_wall(new_x, current_z) {
-                can_move_x = false;
-            }
-            if new_z != current_z && maze.0.is_wall(current_x, new_z) {
-                can_move_z = false;
-            }
-
-            if can_move_x {
+            if (new_x != current_x && !maze.0.is_wall(new_x, current_z)) || new_x == current_x {
                 player.position.x = new_position.x;
             }
-            if can_move_z {
+            if (new_z != current_z && !maze.0.is_wall(current_x, new_z)) || new_z == current_z {
                 player.position.z = new_position.z;
             }
 
             transform.translation = player.position;
-            camera_transform.translation = player.position + Vec3::new(-10.0, 10.0, 10.0);
-            camera_transform.look_at(player.position, Vec3::Y);
         }
+
+        camera_transform.translation = player.position;
+        camera_transform.look_at(player.position + transform.local_z(), Vec3::Y);
     }
 }
 
@@ -152,12 +144,11 @@ pub fn update_maze_display(
 
     let mut maze_text = String::new();
     
-    // Ajouter une bordure supérieure
     maze_text.push_str(&"+".repeat(WIDTH + 2));
     maze_text.push('\n');
 
     for z in 0..HEIGHT {
-        maze_text.push('|'); // Bordure gauche
+        maze_text.push('|'); 
         for x in 0..WIDTH {
             let char = if x == player_x && z == player_z {
                 'p' 
@@ -171,7 +162,6 @@ pub fn update_maze_display(
         maze_text.push_str("|\n"); 
     }
 
-    // Ajouter une bordure inférieure
     maze_text.push_str(&"+".repeat(WIDTH + 2));
 
     if let Ok(mut text) = text_query.get_single_mut() {
