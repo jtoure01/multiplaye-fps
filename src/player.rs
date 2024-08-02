@@ -12,5 +12,9 @@ impl Player {
             position,
             weapon_entity: None,
         }
+
+    }
+    pub fn add_weapon(&mut self, weapon_entity: Entity) {
+        self.weapon_entity = Some(weapon_entity);
     }
 }

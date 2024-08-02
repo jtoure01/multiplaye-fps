@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use crate::player::Player;
+use crate::weapon::Weapon;
 use crate::components::{MazeResource, Wall, MazeDisplay};
 use crate::maze::{Maze, WIDTH, HEIGHT};
 
@@ -25,18 +26,6 @@ pub fn setup(
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..default()
     });
-
-    // Joueur
-    let spawn_pos = find_spawn_position(&maze.0);
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
-            material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-            transform: Transform::from_translation(spawn_pos),
-            ..default()
-        },
-        Player::new(spawn_pos),
-    ));
 
     // Murs du labyrinthe
     for y in 0..HEIGHT {
@@ -79,6 +68,7 @@ pub fn setup(
         MazeDisplay,
     ));
 }
+
 pub fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&mut Transform, &mut Player)>,
@@ -179,4 +169,44 @@ fn find_spawn_position(maze: &Maze) -> Vec3 {
     }
     // Position par défaut si aucune zone de spawn n'est trouvée
     Vec3::new(1.0, 0.5, 1.0)
+}
+
+pub fn spawn_player_with_weapon(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    // Load the .glb model for the weapon
+    let weapon_handle: Handle<Scene> = asset_server.load("models/weapon.glb#Scene0");
+
+    // Load the .glb model for the player
+    let player_handle: Handle<Scene> = asset_server.load("models/player.glb#Scene0");
+
+    // Create the player entity
+    let player_entity = commands.spawn((
+        Player::new(Vec3::new(0.0, 0.5, 0.0)),
+        SceneBundle {
+            scene: player_handle,
+            transform: Transform {
+                translation: Vec3::new(0.0, 0.5, 0.0),
+                scale: Vec3::new(0.5, 0.5, 0.5), // Adjust the scale here
+                ..default()
+            },
+        },
+    )).id();
+
+    // Create the weapon entity and attach it to the player
+    commands.entity(player_entity).with_children(|parent| {
+        parent.spawn((
+            Weapon { damage: 10.0 },
+            SceneBundle {
+                scene: weapon_handle,
+                transform: Transform {
+                    translation: Vec3::new(0.5, -0.5, 1.0), // Adjust this as needed
+                    rotation: Quat::from_rotation_y(0.0),
+                    scale: Vec3::new(0.5, 0.5, 0.5), // Adjust the scale here
+                },
+                ..default()
+            },
+        ));
+    });
 }
